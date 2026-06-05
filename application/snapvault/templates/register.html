@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Register &middot; SnapVault{% endblock %}
+
+{% block content %}
+<h1>Create an account</h1>
+<form method="post" class="stacked">
+  <label>
+    Username
+    <input type="text" name="username" required minlength="3" maxlength="64" autocomplete="username">
+  </label>
+  <label>
+    Password
+    <input type="password" name="password" required minlength="6" autocomplete="new-password">
+  </label>
+  <button type="submit" class="btn primary">Register</button>
+</form>
+<p class="muted">Already have an account? <a href="{{ url_for('auth.login') }}">Log in</a>.</p>
+{% endblock %}

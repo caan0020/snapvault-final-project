@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ photo.title }} &middot; SnapVault{% endblock %}
+
+{% block content %}
+<p><a href="{{ url_for('main.album_detail', album_id=photo.album_id) }}">&larr; back to {{ photo.album.name }}</a></p>
+
+<figure class="photo">
+  <img src="{{ url }}" alt="{{ photo.title }}">
+  <figcaption>
+    <h1>{{ photo.title }}</h1>
+    {% if photo.description %}<p>{{ photo.description }}</p>{% endif %}
+    <p class="muted">Uploaded {{ photo.created_at.strftime('%Y-%m-%d %H:%M') }} UTC</p>
+  </figcaption>
+</figure>
+
+<details class="card">
+  <summary>Edit photo</summary>
+  <form method="post" action="{{ url_for('main.photo_edit', photo_id=photo.id) }}" class="stacked">
+    <label>
+      Title
+      <input type="text" name="title" value="{{ photo.title }}" required maxlength="160">
+    </label>
+    <label>
+      Description
+      <textarea name="description" rows="3" maxlength="2000">{{ photo.description }}</textarea>
+    </label>
+    <button type="submit" class="btn primary">Save changes</button>
+  </form>
+</details>
+
+<form method="post" action="{{ url_for('main.photo_delete', photo_id=photo.id) }}"
+      onsubmit="return confirm('Delete this photo?');">
+  <button type="submit" class="btn danger">Delete photo</button>
+</form>
+{% endblock %}
