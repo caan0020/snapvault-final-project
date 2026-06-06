@@ -9,9 +9,8 @@ Lab — Foundational Services** (region `us-east-1`).
 |---|---|
 | `setup-s3.md` | Step-by-step guide for creating the S3 bucket (`snapvault-caan0020`) and configuring access through `LabRole`, with the AWS CLI commands used. |
 | `setup-rds.md` | Step-by-step guide for creating the RDS PostgreSQL instance (`snapvault-db`, `db.t3.micro`, private, single-AZ) and capturing the connection details for Elastic Beanstalk. |
+| `setup-eb.md` | Step-by-step guide for deploying the Flask app to Elastic Beanstalk (single-instance Python 3.11 environment), setting env vars, and wiring the RDS security group. |
 
 Future additions planned:
 
-- `eb-deployment.md` — Elastic Beanstalk environment creation, env var setup,
-  and `eb deploy` workflow.
 - `screenshots/` — AWS console screenshots referenced from the final report.
