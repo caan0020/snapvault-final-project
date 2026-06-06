@@ -7,7 +7,6 @@ Lab — Foundational Services** (region `us-east-1`).
 
 | File | Purpose |
 |---|---|
-| `s3-bucket-policy.json` | Least-privilege IAM policy granting `PutObject`, `GetObject`, `DeleteObject` on the SnapVault S3 bucket. Kept as a reference even though `LabRole`'s built-in permissions covered S3 in our lab variant. |
 | `setup-s3.md` | Step-by-step guide for creating the S3 bucket (`snapvault-caan0020`) and configuring access through `LabRole`, with the AWS CLI commands used. |
 | `setup-rds.md` | Step-by-step guide for creating the RDS PostgreSQL instance (`snapvault-db`, `db.t3.micro`, private, single-AZ) and capturing the connection details for Elastic Beanstalk. |
 
