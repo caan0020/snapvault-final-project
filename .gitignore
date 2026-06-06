@@ -6,3 +6,5 @@ venv/
 *.db
 uploads/
 .elasticbeanstalk/
+setup-rds.md
+setup-s3.md
