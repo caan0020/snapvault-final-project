@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}SnapVault{% endblock %}</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='88'%3E%F0%9F%93%B7%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+{% block header %}
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="{{ url_for('main.index') }}">
+        <span class="brand-mark">📷</span><span>SnapVault</span>
+      </a>
+      <nav class="nav-links">
+        <a href="{{ url_for('main.index') }}">Dashboard</a>
+        <a href="{{ url_for('main.albums') }}">Albums</a>
+        <a href="{{ url_for('main.favorites') }}">Favorites</a>
+      </nav>
+      <form class="nav-search" action="{{ url_for('main.search') }}" method="get" role="search">
+        <input type="search" name="q" placeholder="Search photos…"
+               value="{{ request.args.get('q', '') }}" aria-label="Search photos">
+      </form>
+      <span class="badge badge-{{ backend }}" title="Active backend">{{ backend|upper }}</span>
+    </div>
+  </header>
+{% endblock %}
+
+  <main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flashes">
+          {% for cat, msg in messages %}
+            <div class="flash flash-{{ cat }}">{{ msg }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <span>📷 <strong>SnapVault</strong> — cloud photo gallery</span>
+    <span class="dot">·</span>
+    <span>Flask + DynamoDB + S3 on Elastic Beanstalk</span>
+  </footer>
+</body>
+</html>

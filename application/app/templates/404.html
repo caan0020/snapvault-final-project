@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Not found · SnapVault{% endblock %}
+{% block content %}
+<div class="empty">
+  <div class="empty-icon">🔍</div>
+  <h2>Nothing here</h2>
+  <p>That page or photo doesn’t exist (or was deleted).</p>
+  <a class="btn btn-primary" href="{{ url_for('main.index') }}">Back to dashboard</a>
+</div>
+{% endblock %}

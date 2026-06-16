@@ -1,0 +1,42 @@
+{# Reusable photo thumbnail card, used by the dashboard, albums, search,
+   favorites and share pages so the gallery looks the same everywhere. #}
+{% macro photo_thumb(photo, label=None) %}
+<a class="photo-card" href="{{ url_for('main.photo_detail', photo_id=photo.id) }}">
+  <div class="thumb">
+    <img loading="lazy" src="{{ url_for('main.photo_raw', photo_id=photo.id) }}" alt="{{ photo.title }}">
+    {% if photo.is_favorite %}<span class="star" title="Favorite">★</span>{% endif %}
+  </div>
+  <div class="photo-meta">
+    <span class="photo-title">{{ photo.title }}</span>
+    {% if label %}<span class="photo-sub">{{ label }}</span>{% endif %}
+  </div>
+</a>
+{% endmacro %}
+
+{# Album card with a cover (newest photo) and a photo count. #}
+{% macro album_card(card) %}
+<a class="album-card" href="{{ url_for('main.album_detail', album_id=card.album.id) }}">
+  {% if card.cover %}
+  <div class="album-cover"><img loading="lazy" src="{{ url_for('main.photo_raw', photo_id=card.cover.id) }}" alt="{{ card.album.name }}"></div>
+  {% else %}
+  <div class="album-cover empty">📁</div>
+  {% endif %}
+  <div class="album-body">
+    <span class="album-name">{{ card.album.name }}</span>
+    <span class="pill">{{ card.count }} photo{{ '' if card.count == 1 else 's' }}</span>
+  </div>
+</a>
+{% endmacro %}
+
+{# Same look, but a plain link for the public share page (no app routes). #}
+{% macro share_thumb(photo) %}
+<a class="photo-card" href="{{ url_for('main.photo_raw', photo_id=photo.id) }}" target="_blank" rel="noopener">
+  <div class="thumb">
+    <img loading="lazy" src="{{ url_for('main.photo_raw', photo_id=photo.id) }}" alt="{{ photo.title }}">
+  </div>
+  <div class="photo-meta">
+    <span class="photo-title">{{ photo.title }}</span>
+    {% if photo.tags %}<span class="photo-sub">#{{ photo.tag_list()|join(' #') }}</span>{% endif %}
+  </div>
+</a>
+{% endmacro %}
