@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "_macros.html" import photo_thumb %}
+{% block title %}{{ album.name }} · SnapVault{% endblock %}
+{% block content %}
+
+<div class="crumb"><a href="{{ url_for('main.albums') }}">Albums</a> / {{ album.name }}</div>
+
+<div class="page-head">
+  <div>
+    <h1>{{ album.name }}</h1>
+    <p class="sub">{{ photos|length }} photo{{ '' if photos|length == 1 else 's' }}.</p>
+  </div>
+  <div class="btn-row">
+    <a class="btn btn-primary" href="{{ url_for('main.upload', album_id=album.id) }}">+ Upload photo</a>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-head"><h2>Album settings</h2></div>
+
+  <form class="inline-form" method="post" action="{{ url_for('main.album_rename', album_id=album.id) }}">
+    <label style="margin:0">Name</label>
+    <input type="text" name="name" value="{{ album.name }}" required>
+    <button class="btn" type="submit">Rename</button>
+  </form>
+
+  <div class="btn-row" style="margin-top:14px; align-items:center">
+    <a class="btn btn-sm" href="{{ url_for('main.share', token=album.share_token) }}" target="_blank" rel="noopener">🔗 Open public share link</a>
+    <form method="post" action="{{ url_for('main.album_reshare', album_id=album.id) }}" style="display:inline">
+      <button class="btn btn-sm btn-ghost" type="submit">Reset link</button>
+    </form>
+    <form method="post" action="{{ url_for('main.album_delete', album_id=album.id) }}" style="margin-left:auto"
+          onsubmit="return confirm('Delete this album and all its photos? This also removes the files from S3.');">
+      <button class="btn btn-sm btn-danger" type="submit">Delete album</button>
+    </form>
+  </div>
+  <p class="hint" style="margin-top:8px">Share link: <code>{{ url_for('main.share', token=album.share_token, _external=True) }}</code></p>
+</div>
+
+{% if photos %}
+  <div class="sec-head"><h2>Photos</h2></div>
+  <div class="grid">
+    {% for p in photos %}{{ photo_thumb(p) }}{% endfor %}
+  </div>
+{% else %}
+  <div class="empty">
+    <div class="empty-icon">🖼️</div>
+    <h2>This album is empty</h2>
+    <p>Upload a photo — it is stored in S3 and recorded in DynamoDB.</p>
+    <a class="btn btn-primary" href="{{ url_for('main.upload', album_id=album.id) }}">Upload a photo</a>
+  </div>
+{% endif %}
+
+{% endblock %}

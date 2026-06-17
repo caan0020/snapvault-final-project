@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "_macros.html" import album_card %}
+{% block title %}Albums · SnapVault{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Albums</h1>
+    <p class="sub">{{ cards|length }} album{{ '' if cards|length == 1 else 's' }}.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <form class="inline-form" method="post" action="{{ url_for('main.albums') }}">
+    <input type="text" name="name" placeholder="New album name (e.g. Holiday 2026)" required>
+    <button class="btn btn-primary" type="submit">+ Create album</button>
+  </form>
+</div>
+
+{% if cards %}
+  <div class="albums-grid" style="margin-top:20px">
+    {% for c in cards %}{{ album_card(c) }}{% endfor %}
+  </div>
+{% else %}
+  <div class="empty">
+    <div class="empty-icon">📁</div>
+    <h2>No albums yet</h2>
+    <p>Use the box above to create your first album.</p>
+  </div>
+{% endif %}
+
+{% endblock %}

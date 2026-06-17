@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "_macros.html" import photo_thumb, album_card %}
+{% block title %}Dashboard · SnapVault{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Dashboard</h1>
+    <p class="sub">Your photos, albums and favorites at a glance.</p>
+  </div>
+  <div class="btn-row">
+    <a class="btn" href="{{ url_for('main.albums') }}">All albums</a>
+    <a class="btn btn-primary" href="{{ url_for('main.albums') }}">+ New album</a>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat accent"><div class="n">{{ stats.photos }}</div><div class="l">Photos</div></div>
+  <div class="stat"><div class="n">{{ stats.albums }}</div><div class="l">Albums</div></div>
+  <div class="stat"><div class="n">{{ stats.favorites }}</div><div class="l">Favorites</div></div>
+  <div class="stat"><div class="n">{{ stats.storage }}</div><div class="l">Stored</div></div>
+</div>
+
+{% if recent %}
+  <div class="sec-head"><h2>Recent uploads</h2><a href="{{ url_for('main.albums') }}">Browse albums →</a></div>
+  <div class="grid">
+    {% for p in recent %}{{ photo_thumb(p, album_names.get(p.album_id)) }}{% endfor %}
+  </div>
+{% else %}
+  <div class="empty">
+    <div class="empty-icon">📷</div>
+    <h2>No photos yet</h2>
+    <p>Create an album, then upload your first photo to S3.</p>
+    <a class="btn btn-primary" href="{{ url_for('main.albums') }}">Create an album</a>
+  </div>
+{% endif %}
+
+{% if favorites %}
+  <div class="sec-head"><h2>★ Favorites</h2><a href="{{ url_for('main.favorites') }}">See all →</a></div>
+  <div class="grid small">
+    {% for p in favorites %}{{ photo_thumb(p, album_names.get(p.album_id)) }}{% endfor %}
+  </div>
+{% endif %}
+
+{% if cards %}
+  <div class="sec-head"><h2>Albums</h2><a href="{{ url_for('main.albums') }}">See all →</a></div>
+  <div class="albums-grid">
+    {% for c in cards %}{{ album_card(c) }}{% endfor %}
+  </div>
+{% endif %}
+
+{% endblock %}
