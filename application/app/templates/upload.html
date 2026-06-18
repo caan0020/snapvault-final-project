@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Upload · {{ album.name }}{% endblock %}
+{% block content %}
+
+<div class="crumb">
+  <a href="{{ url_for('main.albums') }}">Albums</a> /
+  <a href="{{ url_for('main.album_detail', album_id=album.id) }}">{{ album.name }}</a> / Upload
+</div>
+
+<div class="page-head"><div><h1>Upload a photo</h1>
+  <p class="sub">The file goes to S3; its details go to DynamoDB.</p></div></div>
+
+<div class="panel">
+  <form class="form-grid" method="post" enctype="multipart/form-data">
+    <div>
+      <label>Image file</label>
+      <label class="filedrop" id="drop">
+        <div class="big">⬆️</div>
+        <div>Click to choose a PNG, JPEG, WEBP or GIF</div>
+        <div class="name" id="fname"></div>
+        <input type="file" name="photo" accept="image/png,image/jpeg,image/webp,image/gif" required id="file">
+      </label>
+    </div>
+    <div>
+      <label for="title">Title</label>
+      <input type="text" id="title" name="title" placeholder="e.g. Sunset over the bay" required>
+    </div>
+    <div>
+      <label for="tags">Tags <span class="muted">(comma separated)</span></label>
+      <input type="text" id="tags" name="tags" placeholder="nature, beach, summer">
+    </div>
+    <div>
+      <label for="description">Description</label>
+      <textarea id="description" name="description" placeholder="Optional notes about this photo…"></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" type="submit">Upload to cloud</button>
+      <a class="btn" href="{{ url_for('main.album_detail', album_id=album.id) }}">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<script>
+  // tiny niceness: show the chosen file name in the drop zone
+  var f = document.getElementById('file');
+  if (f) f.addEventListener('change', function () {
+    document.getElementById('fname').textContent = f.files.length ? f.files[0].name : '';
+  });
+</script>
+
+{% endblock %}

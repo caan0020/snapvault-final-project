@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "_macros.html" import photo_thumb %}
+{% block title %}Favorites · SnapVault{% endblock %}
+{% block content %}
+
+<div class="page-head"><div>
+  <h1>★ Favorites</h1>
+  <p class="sub">{{ photos|length }} starred photo{{ '' if photos|length == 1 else 's' }}.</p>
+</div></div>
+
+{% if photos %}
+  <div class="grid">
+    {% for p in photos %}{{ photo_thumb(p, album_names.get(p.album_id)) }}{% endfor %}
+  </div>
+{% else %}
+  <div class="empty">
+    <div class="empty-icon">☆</div>
+    <h2>No favorites yet</h2>
+    <p>Open any photo and tap “Add to favorites” to pin it here.</p>
+    <a class="btn btn-primary" href="{{ url_for('main.albums') }}">Browse albums</a>
+  </div>
+{% endif %}
+
+{% endblock %}

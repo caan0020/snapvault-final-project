@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}{{ photo.title }} · SnapVault{% endblock %}
+{% block content %}
+
+<div class="crumb">
+  <a href="{{ url_for('main.albums') }}">Albums</a> /
+  {% if album %}<a href="{{ url_for('main.album_detail', album_id=album.id) }}">{{ album.name }}</a>{% else %}<span class="muted">(no album)</span>{% endif %}
+  / {{ photo.title }}
+</div>
+
+<div class="photo-view">
+  <div>
+    <div class="photo-stage">
+      <img src="{{ url_for('main.photo_raw', photo_id=photo.id) }}" alt="{{ photo.title }}">
+    </div>
+    <div class="btn-row" style="margin-top:14px">
+      <a class="btn" href="{{ url_for('main.photo_download', photo_id=photo.id) }}">⬇️ Download original</a>
+      <form method="post" action="{{ url_for('main.photo_favorite', photo_id=photo.id) }}">
+        <button class="btn" type="submit">{{ '★ Unfavorite' if photo.is_favorite else '☆ Add to favorites' }}</button>
+      </form>
+      <form method="post" action="{{ url_for('main.photo_delete', photo_id=photo.id) }}" style="margin-left:auto"
+            onsubmit="return confirm('Delete this photo from S3 and DynamoDB? This cannot be undone.');">
+        <button class="btn btn-danger" type="submit">Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <h2 style="margin-bottom:8px">{{ photo.title }}</h2>
+      {% if photo.tags %}
+        <div class="tags">{% for t in photo.tag_list() %}<span class="tag">#{{ t }}</span>{% endfor %}</div>
+      {% endif %}
+      {% if photo.description %}<p style="margin-top:12px">{{ photo.description }}</p>{% endif %}
+      <dl class="kv">
+        <dt>Uploaded</dt><dd>{{ photo.created_at[:10] }}</dd>
+        <dt>Type</dt><dd>{{ photo.content_type or '—' }}</dd>
+        <dt>File</dt><dd>{{ photo.file_name or '—' }}</dd>
+        <dt>S3 key</dt><dd><code>{{ photo.file_key }}</code></dd>
+      </dl>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Edit details</h2></div>
+      <form class="form-grid" method="post" action="{{ url_for('main.photo_edit', photo_id=photo.id) }}">
+        <div><label>Title</label><input type="text" name="title" value="{{ photo.title }}" required></div>
+        <div><label>Tags <span class="muted">(comma separated)</span></label>
+          <input type="text" name="tags" value="{{ photo.tags }}" placeholder="nature, beach"></div>
+        <div><label>Description</label><textarea name="description">{{ photo.description }}</textarea></div>
+        <div><label>Album</label>
+          <select name="album_id">
+            {% for a in all_albums %}
+              <option value="{{ a.id }}" {% if a.id == photo.album_id %}selected{% endif %}>{{ a.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="btn-row"><button class="btn btn-primary" type="submit">Save changes</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

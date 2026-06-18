@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_macros.html" import share_thumb %}
+{% block title %}{{ album.name }} · Shared album{% endblock %}
+
+{% block header %}
+<header class="nav share-top">
+  <div class="nav-inner">
+    <span class="brand" style="color:#fff"><span class="brand-mark">📷</span><span>SnapVault</span></span>
+    <span style="margin-left:auto; font-weight:700; opacity:.95">Shared album</span>
+  </div>
+</header>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-head"><div>
+  <h1>{{ album.name }}</h1>
+  <p class="sub">{{ photos|length }} photo{{ '' if photos|length == 1 else 's' }} · public gallery</p>
+</div></div>
+
+<div class="share-note">📢 You are viewing a public, read-only album shared from SnapVault. Click any photo to open it full size.</div>
+
+{% if photos %}
+  <div class="grid">
+    {% for p in photos %}{{ share_thumb(p) }}{% endfor %}
+  </div>
+{% else %}
+  <div class="empty"><div class="empty-icon">🖼️</div><h2>This album is empty</h2></div>
+{% endif %}
+
+{% endblock %}

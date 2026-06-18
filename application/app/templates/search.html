@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "_macros.html" import photo_thumb %}
+{% block title %}Search · SnapVault{% endblock %}
+{% block content %}
+
+<div class="page-head"><div>
+  <h1>Search</h1>
+  <p class="sub">Search across photo titles, descriptions and tags.</p>
+</div></div>
+
+<div class="panel">
+  <form class="inline-form" method="get" action="{{ url_for('main.search') }}">
+    <input type="text" name="q" value="{{ q }}" placeholder="Search photos…" autofocus>
+    <button class="btn btn-primary" type="submit">Search</button>
+  </form>
+</div>
+
+{% if q %}
+  <div class="sec-head"><h2>{{ results|length }} result{{ '' if results|length == 1 else 's' }} for “{{ q }}”</h2></div>
+  {% if results %}
+    <div class="grid">
+      {% for p in results %}{{ photo_thumb(p, album_names.get(p.album_id)) }}{% endfor %}
+    </div>
+  {% else %}
+    <div class="empty"><div class="empty-icon">🔍</div><h2>No matches</h2><p>Try a different word or tag.</p></div>
+  {% endif %}
+{% endif %}
+
+{% endblock %}
