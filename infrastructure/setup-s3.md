@@ -1,74 +1,81 @@
-# S3 setup
+# Amazon S3 setup
 
-This document walks through how the photo-storage bucket for SnapVault was
-created, why each choice was made, and how the application connects to it
-at runtime. Everything happens in `us-east-1`, the only region the AWS
-Academy Learner Lab allows.
+The photo **files** (the image bytes) live in a single **private** S3
+bucket. The metadata about them lives in DynamoDB; S3 only ever holds
+the binary objects.
 
-## Why S3 at all
+## The bucket
 
-The application stores two kinds of data: image files (the photos
-themselves) and metadata (titles, descriptions, owners, timestamps). Image
-files are large and binary, so putting them in a relational database is
-both expensive and slow. S3 is the natural place for them — it gives
-practically unlimited storage at a few cents per gigabyte per month, and
-the application can hand each upload to S3 with one `boto3` call. Only the
-metadata lives in RDS, where SQL queries are cheap.
+| Property | Value |
+|---|---|
+| Name | `snapvault-<random>` (globally unique; printed by `init_s3.py`) |
+| Region | `us-east-1` |
+| Public access | **fully blocked** (all four block settings on) |
+| Object keys | `albums/<album-id>/<photo-id>-<filename>` |
+
+## Why the bucket stays private
+
+A photo gallery's instinct is to make the bucket public so `<img>` tags
+can point straight at it. We deliberately **don't**. Instead the app
+reads each object itself and streams the bytes back through a Flask
+route (`/photos/<id>/raw`). Benefits:
+
+- the bucket needs no public policy and passes the "Block all public
+  access" check;
+- it directly satisfies the rubric line *"files uploaded **and
+  downloaded** by the app code"* — both directions are explicit boto3
+  calls in our own code, not a public/presigned URL handed to the
+  browser.
+
+## How the app talks to it
+
+All file I/O goes through `app/storage/s3.py`:
+
+| Operation | boto3 call | Used by |
+|---|---|---|
+| **upload** | `client.put_object(Bucket, Key, Body, ContentType)` | upload a photo |
+| **download** | `client.get_object(Bucket, Key)` → `["Body"].read()` | show / download a photo |
+| delete | `client.delete_object(Bucket, Key)` | delete a photo / album |
 
 ## Creating the bucket
 
-S3 bucket names are globally unique, so we picked one tied to the GitHub
-identifier so we'd know it was ours: `snapvault-caan0020`. The CLI command
-that created it from the Cloud9 terminal:
-
 ```bash
-aws s3api create-bucket \
-  --bucket snapvault-caan0020 \
-  --region us-east-1
+python3 infrastructure/init_s3.py            # auto-named
+python3 infrastructure/init_s3.py my-name    # or your own name
 ```
 
-If you re-run this and the name is taken, suffix it (`-1`, `-eu`, …) and
-remember to update the `S3_BUCKET` environment variable on Elastic
-Beanstalk in [setup-eb.md](setup-eb.md) to match.
-
-## Locking down public access
-
-SnapVault never serves S3 objects as public URLs. When the app needs to
-show a photo, the storage helper in `application/snapvault/storage.py`
-asks S3 to generate a *presigned URL* — a one-hour signed link that proves
-the request is allowed without exposing credentials. That means the
-bucket itself doesn't need to be world-readable. In fact, leaving it
-public would be a security mistake.
-
-The bucket's "Block all public access" setting was turned on with:
+The script creates the bucket and then calls `put_public_access_block`
+with all four flags `True`. Equivalent AWS CLI:
 
 ```bash
-aws s3api put-public-access-block \
-  --bucket snapvault-caan0020 \
+aws s3 mb s3://snapvault-caan0020 --region us-east-1
+aws s3api put-public-access-block --bucket snapvault-caan0020 \
   --public-access-block-configuration \
-    "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+  BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
 ```
 
-All four flags need to be `true` — they cover four different ways an
-object can become public (ACLs, public ACL evaluation, bucket policies,
-and policy evaluation respectively). Setting just one isn't enough.
-
-## Verifying everything works
-
-After creating the bucket, three CLI calls confirm the bucket exists, is
-private, and that the role we're running as can actually use it:
+After creating it, hand the name to Beanstalk:
 
 ```bash
-aws s3 ls                                                       # bucket appears here
-aws s3api get-public-access-block --bucket snapvault-caan0020   # four `true` flags
+eb setenv SNAPVAULT_BUCKET=<bucket-name>
 ```
 
-The last and most reassuring test is a real round-trip — upload a tiny
-file, download it, delete it:
+A quick CLI round-trip proves the role can use the bucket:
 
 ```bash
-echo "hello snapvault" > /tmp/hello.txt
-aws s3 cp /tmp/hello.txt s3://snapvault-caan0020/test/hello.txt
-aws s3 cp s3://snapvault-caan0020/test/hello.txt -
-aws s3 rm  s3://snapvault-caan0020/test/hello.txt
+echo "hello" > /tmp/h.txt
+aws s3 cp /tmp/h.txt s3://<bucket>/test/h.txt   # upload
+aws s3 cp s3://<bucket>/test/h.txt -            # download
+aws s3 rm s3://<bucket>/test/h.txt              # delete
 ```
+
+## Permissions
+
+The EB instance uses **`LabInstanceProfile`** (S3 read/write is included
+in Learner Lab). No `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
+anywhere in the repo.
+
+## Screenshot to capture
+
+- `07-s3-bucket.png` — the bucket's objects list with *"Block all public
+  access: On"* visible.
