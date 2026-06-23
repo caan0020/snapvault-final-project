@@ -1,8 +1,16 @@
+# Python
 __pycache__/
 *.pyc
+
+# virtualenvs
 .venv/
 venv/
+
+# local dev data (JSON "database" + uploaded files) — never commit
+.data/
+
+# secrets / local config
 .env
-*.db
-uploads/
+
+# Elastic Beanstalk CLI state
 .elasticbeanstalk/
