@@ -1,377 +1,361 @@
 # SnapVault — Final Project Report
 
-A small photo-gallery web application written in Python with Flask,
-deployed to AWS using Elastic Beanstalk, RDS PostgreSQL, and S3.
+A cloud **photo gallery** web application written in Python with Flask,
+deployed to AWS using **Elastic Beanstalk**, **DynamoDB** and **S3**, and
+provisioned from **Cloud9**.
 
 **Author:** Can Akgun (`caan0020`)
-**Course:** CACBA 2026 — Final Project
-**Live URL:** http://snapvault-env.eba-xcb7bpub.us-east-1.elasticbeanstalk.com
+**Course:** CACBA 2026 — Services and Development Platforms for Cloud Based Applications
+**Live URL:** _`http://snapvault-env.<your-id>.us-east-1.elasticbeanstalk.com`_
+&nbsp;&nbsp;_(fill in after `eb open` — see [deployment](#5-deployment-to-the-cloud))_
 
 ---
 
 ## Table of contents
 
-1. [Project description](#project-description)
-2. [Architecture](#architecture)
-3. [AWS services used](#aws-services-used)
-4. [Deployment to the cloud](#deployment-to-the-cloud)
-5. [Problems encountered and how they were solved](#problems-encountered-and-how-they-were-solved)
-6. [Repository content](#repository-content)
-7. [Running locally](#running-locally)
+1. [Project description](#1-project-description)
+2. [Architecture](#2-architecture)
+3. [AWS services used](#3-aws-services-used-with-screenshots)
+4. [How CRUD, S3 and DynamoDB are wired](#4-how-crud-s3-and-dynamodb-are-wired)
+5. [Deployment to the cloud](#5-deployment-to-the-cloud)
+6. [Problems encountered and how they were solved](#6-problems-encountered-and-how-they-were-solved)
+7. [Repository content](#7-repository-content)
+8. [Running locally](#8-running-locally)
 
 ---
 
-## Project description
+## 1. Project description
 
-SnapVault is a web-based photo gallery. After signing up, each user can
-create albums, upload pictures, browse a responsive thumbnail grid,
-edit metadata, and delete what they no longer want. The goal is to give
-a single, simple place to keep memories safe in AWS rather than on a
-phone or laptop that can break.
+**SnapVault** is a web-based photo gallery hosted entirely in AWS. You
+organise pictures into albums, upload them to the cloud, then tag,
+favourite, search and share them. The image files are kept in Amazon S3
+and everything *about* them (titles, tags, which album, …) in Amazon
+DynamoDB, so memories live safely in the cloud instead of on a phone or
+laptop that can break.
 
-### What the app actually does (full CRUD)
+### Features
 
-The rubric asks for a CRUD application; here is the explicit mapping:
+- **Albums & photos** with full create/read/update/delete.
+- **Upload to the cloud** — each file is written to S3 by the app itself.
+- **Tags** — comma-separated, normalised, shown as chips.
+- **Search** — across photo titles, descriptions and tags.
+- **Favourites** — star photos; they get a pinned section.
+- **Dashboard** — live counts (photos, albums, favourites, bytes stored).
+- **Public share link** — each album has an unguessable token URL that
+  shows a clean, read-only gallery without exposing the management UI.
+- **Download original** — the app pulls the file back out of S3 and
+  streams it to the browser.
+
+### Full CRUD (rubric criterion 1)
 
 | Entity | Create | Read | Update | Delete |
 |---|---|---|---|---|
-| **User** | Register | Login session | (not exposed) | (not exposed) |
-| **Album** | "Create album" form | "My albums" list + album page | Rename album | Delete album (cascades to its photos and S3 objects) |
-| **Photo** | "Upload photo" form (writes to S3 + RDS) | Album gallery + single-photo view (presigned S3 URL) | Edit title and description | Delete (removes RDS row + S3 object) |
+| **Album** | "Create album" form → `put_item` | albums list + album page (`scan` / `get_item`) | rename, reset share link → `put_item` | delete album → cascades to its photos' DynamoDB rows **and** S3 objects |
+| **Photo** | upload form → **S3 `put_object`** + DynamoDB `put_item` | gallery, single-photo page, raw stream (`get_item` + **S3 `get_object`**) | edit title / description / tags, toggle favourite, move album → `put_item` | delete → DynamoDB `delete_item` + **S3 `delete_object`** |
 
-### Pages (server-rendered)
+### Pages (server-rendered, not a SPA)
 
-1. Home / landing page (`/`)
-2. Register (`/register`)
-3. Log in (`/login`)
-4. My albums (`/albums`)
-5. Single album (`/albums/<id>`)
-6. Upload photo (`/albums/<id>/upload`)
-7. Single photo (`/photos/<id>`)
+1. Dashboard (`/`)
+2. Albums (`/albums`)
+3. Single album (`/albums/<id>`)
+4. Upload photo (`/albums/<id>/upload`)
+5. Single photo (`/photos/<id>`)
+6. Search (`/search`)
+7. Favourites (`/favorites`)
+8. Public shared album (`/share/<token>`)
 
 That is well above the "at least three pages" requirement.
 
 ---
 
-## Architecture
+## 2. Architecture
 
 ```
                        Public internet
-                              │
-                              │ HTTPS / HTTP
+                              │  HTTP
                               ▼
-                ┌────────────────────────────┐
-                │   AWS Elastic Beanstalk    │
-                │   (single-instance env)    │
-                │                            │
-                │   EC2  t2.micro            │
-                │     Nginx → Gunicorn       │
-                │       Flask app            │
-                │       (psycopg2, boto3)    │
-                │                            │
-                │   IAM role: LabRole        │
-                └────────────┬───────────────┘
-                             │
-            ┌────────────────┼──────────────────┐
-            │                │                  │
-            ▼ port 5432      ▼ HTTPS S3 API     ▼ presigned URL
-    ┌────────────────┐   ┌──────────────┐   browser fetches photo
-    │  Amazon RDS    │   │  Amazon S3   │
-    │  PostgreSQL    │   │  bucket:     │
-    │  db.t3.micro   │   │  snapvault-  │
-    │  Single-AZ     │   │   caan0020   │
-    │  Private       │   │  private     │
-    └────────────────┘   └──────────────┘
+              ┌───────────────────────────────┐
+              │     AWS Elastic Beanstalk     │
+              │   single instance, t3.micro   │
+              │      Nginx → Gunicorn         │
+              │        Flask app (boto3)      │
+              │   role: LabInstanceProfile    │
+              └──────┬─────────────────┬──────┘
+                     │   AWS SDK (boto3) / HTTPS
+            ┌────────▼────────┐   ┌────▼─────────────┐
+            │  Amazon DynamoDB │   │   Amazon S3      │
+            │  SnapVault-Albums│   │  private bucket  │
+            │  SnapVault-Photos│   │  photo files     │
+            │  (metadata)      │   │                  │
+            └──────────────────┘   └──────────────────┘
 ```
 
 ### Framework choices
 
-- **Python with Flask** for the web layer. Flask is small, well-documented,
-  and the Elastic Beanstalk Python platform looks for a WSGI callable named
-  `application` — which is exactly what `application/application.py` exposes.
-- **Flask-SQLAlchemy** as the ORM. The data model is small but very
-  relational (users own albums, albums own photos), and SQLAlchemy makes
-  the cascading delete from album → photos → S3 keys a single statement.
-- **Flask-Login** for sessions. Each user only sees their own albums; the
-  route handlers check ownership before responding.
-- **Jinja2** for server-rendered templates. No JavaScript build step;
-  every page is one round trip.
-- **boto3** for AWS calls. Used directly in `snapvault/storage.py` (not
-  hidden behind another wrapper) so the upload/download/delete flow is
-  obvious — important for the rubric's "files should be uploaded directly
-  by the app code" criterion.
-- **psycopg2-binary** as the Postgres driver. Standard for Flask +
-  SQLAlchemy + RDS.
+- **Python + Flask** (app-factory pattern, server-rendered Jinja2
+  templates). Flask is small and the Elastic Beanstalk Python platform
+  looks for a WSGI callable named `application` — exactly what
+  `application/application.py` exposes.
+- **Gunicorn** as the WSGI server in production (via the `Procfile`).
+- **boto3** for every AWS call, used directly in our own `repos/dynamo.py`
+  and `storage/s3.py` — not hidden behind another wrapper — so the
+  upload/download/read/write flow is explicit (important for the rubric).
+- **No ORM, no SQL.** DynamoDB is a key–value store; the data layer is a
+  thin repository over boto3.
 
-### How configuration crosses the local/cloud boundary
+### Provider abstraction (the key design idea)
 
-The app reads `DATABASE_URL`, `STORAGE_BACKEND`, `S3_BUCKET`, `AWS_REGION`,
-and `SECRET_KEY` from environment variables. With no env vars set, it
-falls back to SQLite + a local `uploads/` directory, which is what
-`python application.py` uses for local development. On Elastic Beanstalk
-the env vars point at RDS + S3, and the same code switches with zero
-changes. This is the 12-factor "config in the environment" principle —
-the storage backend in `snapvault/storage.py` exposes the same three
-operations (`save`, `get_url`, `delete`) for both `LocalStorage` and
-`S3Storage`, so the route handlers never care which one is active.
+All data access goes through a **repository** interface (`app/repos`) and
+all file access through a **storage** interface (`app/storage`). A factory
+picks the implementation from one environment variable,
+`SNAPVAULT_BACKEND`:
+
+| `SNAPVAULT_BACKEND` | Data | Files |
+|---|---|---|
+| `local` (default) | a JSON file in `.data/` | the local `.data/uploads/` folder |
+| `aws` | **DynamoDB** | **S3** |
+
+The route handlers and templates are identical in both modes, so the app
+runs on a laptop with no AWS account *and* in the cloud with **zero code
+changes** — moving to AWS is a configuration change. This is the 12-factor
+"config in the environment" principle.
 
 ---
 
-## AWS services used
+## 3. AWS services used (with screenshots)
 
-### Amazon S3 — photo storage
+### Amazon DynamoDB — metadata
 
-The image files themselves live in a single private S3 bucket called
-`snapvault-caan0020` in `us-east-1`. When the app needs to display a
-photo it calls `s3.generate_presigned_url` to get a one-hour signed URL
-and hands that to the browser; the bucket itself never serves public
-objects. Upload, download, and delete are implemented as three named
-boto3 calls in `snapvault/storage.py` (`put_object`,
-`generate_presigned_url`, `delete_object`).
+Two on-demand tables, each with a single string partition key `id`:
+`SnapVault-Albums` and `SnapVault-Photos`. The app reads and writes them
+with boto3 (`get_item`, `scan`, `put_item`, `delete_item`). Every
+attribute is stored as a string to keep marshalling simple. Created by
+[`infrastructure/init_dynamodb.py`](infrastructure/init_dynamodb.py); full
+notes in [`infrastructure/setup-dynamodb.md`](infrastructure/setup-dynamodb.md).
 
-![S3 bucket with the uploaded photo](infrastructure/screenshots/07-s3-bucket-objects.png)
+![DynamoDB tables](infrastructure/screenshots/05-dynamodb-tables.png)
+![DynamoDB items](infrastructure/screenshots/06-dynamodb-items.png)
 
-Full setup steps and the `s3:*` permission discussion are in
+### Amazon S3 — photo files
+
+A single **private** bucket holds the image bytes. Upload, download and
+delete are three explicit boto3 calls in
+[`app/storage/s3.py`](application/app/storage/s3.py) — `put_object`,
+`get_object`, `delete_object`. The bucket has **all public access
+blocked**: the app reads each object itself and streams it back through a
+Flask route, so the browser never talks to S3 directly. Created by
+[`infrastructure/init_s3.py`](infrastructure/init_s3.py); notes in
 [`infrastructure/setup-s3.md`](infrastructure/setup-s3.md).
 
-### Amazon RDS — relational metadata
+![S3 bucket](infrastructure/screenshots/07-s3-bucket.png)
 
-A single PostgreSQL instance (`db.t3.micro`, Single-AZ, gp2 storage)
-holds the `users`, `albums`, and `photos` tables. We chose Postgres
-because the data model is naturally relational and because the Flask
-codebase already imports `psycopg2-binary`. RDS is private — it has no
-public IP, and the only thing that can reach it is the Elastic Beanstalk
-EC2 instance, through a security group rule that references the EB
-security group by ID rather than a hardcoded IP range.
+### AWS Elastic Beanstalk — hosting
 
-![RDS connectivity tab](infrastructure/screenshots/05-rds-connectivity.png)
-![Default VPC security group inbound rules](infrastructure/screenshots/06-default-sg-inbound-rules.png)
-
-Full setup walkthrough and the `gp3 → gp2` lesson are in
-[`infrastructure/setup-rds.md`](infrastructure/setup-rds.md).
-
-### AWS Elastic Beanstalk — application hosting
-
-The Flask app runs on a single-instance Elastic Beanstalk environment
-(`Snapvault-env`) on the Python 3.11 / Amazon Linux 2023 platform.
-Beanstalk gave us Nginx, Gunicorn, the EC2 instance, the security group,
-the CloudWatch alarms, and the public CNAME — all without writing any
-infrastructure code. Deployments are zip uploads from S3 (see the
-deployment section below). The single-instance preset skips the
-Application Load Balancer, which is the most expensive part of a default
-Beanstalk environment — fine for a project with one demo user.
-
-![Elastic Beanstalk environments list](infrastructure/screenshots/03-eb-environments-list.png)
-![Environment properties (env vars masked)](infrastructure/screenshots/04-eb-env-properties.png)
-![Deployment history](infrastructure/screenshots/10-eb-deployments.png)
-
-Full deployment walkthrough is in
+The Flask app runs on a single-instance Beanstalk environment
+(`snapvault-env`, Python 3.11 / Amazon Linux 2023, `t3.micro`). Beanstalk
+provides Nginx, Gunicorn, the EC2 instance, health monitoring and a public
+URL. Static configuration lives in
+[`application/.ebextensions/01_env.config`](application/.ebextensions/01_env.config);
+the unique bucket name is set with `eb setenv`. Notes in
 [`infrastructure/setup-eb.md`](infrastructure/setup-eb.md).
 
-### Amazon EC2 — the actual instance
+![Elastic Beanstalk environment](infrastructure/screenshots/03-eb-environment.png)
+![EB environment properties](infrastructure/screenshots/04-eb-config-env.png)
 
-Behind Beanstalk is a single `t2.micro` EC2 instance running Amazon
-Linux 2023. We never SSH into it; Beanstalk manages it. It has the
-`LabInstanceProfile` attached, which grants it the AWS API permissions
-the app needs at runtime (S3 read/write, CloudWatch log push). Because
-the instance profile gives the application AWS credentials automatically,
-the repository contains zero AWS access keys.
+### Amazon EC2 — the instance behind Beanstalk
 
-![EC2 instance summary](infrastructure/screenshots/08-ec2-instance.png)
+Beanstalk manages one `t3.micro` EC2 instance running Amazon Linux 2023.
+We never SSH in; Beanstalk owns its lifecycle. It carries the
+`LabInstanceProfile`, which grants the app its DynamoDB + S3 permissions
+at runtime — so **no AWS access keys appear anywhere** in the repo.
 
-### AWS IAM — credentials and access
+![EC2 instance](infrastructure/screenshots/08-ec2-instance.png)
 
-The AWS Academy Learner Lab forbids creating new IAM roles or users, so
-we deliberately reused the lab's pre-existing `LabRole` and
-`LabInstanceProfile`. `LabRole` already grants the permissions the app
-needs (S3 read/write, RDS access from within the VPC), which was
-confirmed by an S3 upload-download-delete smoke test before any Flask
-code touched the cloud. This is actually a security improvement over
-the textbook approach: no static `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
-appear in the code, the environment, or the repository at any point.
+### AWS Cloud9 — the development & deployment environment
 
-![IAM policies in the lab account](infrastructure/screenshots/09-iam-policies.png)
+The whole project is cloned, the resources are created
+(`init_dynamodb.py`, `init_s3.py`), and the app is deployed
+(`eb create` / `eb deploy`) from a Cloud9 terminal, whose credentials are
+already wired into the lab account.
 
----
+![Cloud9 terminal](infrastructure/screenshots/10-cloud9.png)
 
-## Deployment to the cloud
+### AWS IAM — credentials
 
-The full deploy procedure is documented in
-[`infrastructure/setup-eb.md`](infrastructure/setup-eb.md). At a glance:
+AWS Academy Learner Lab forbids creating new IAM roles, so SnapVault reuses
+the pre-existing **`LabRole`** (Beanstalk's service role) and
+**`LabInstanceProfile`** (the EC2 instance role). Because the instance
+profile supplies credentials automatically, the repository contains zero
+static keys.
 
-1. **Package the application code as a zip** in the Cloud9 terminal:
-   ```bash
-   cd ~/sdpcba-2026-finalproject-caan0020/application
-   zip -r ../snapvault-v1.zip . -x "*.venv*" "*__pycache__*" "*.db" "uploads/*"
-   ```
-2. **Upload the zip to S3**, since the AWS Academy Learner Lab terminal
-   has no GUI file picker:
-   ```bash
-   aws s3 cp ~/sdpcba-2026-finalproject-caan0020/snapvault-v1.zip \
-     s3://snapvault-caan0020/deployments/snapvault-v1.zip
-   ```
-3. **Create an Elastic Beanstalk application** named `snapvault` from
-   the AWS Console, picking the Python 3.11 platform, the S3 URL from
-   step 2 as the application source, and the **Single instance** preset.
-4. **Service access page (the critical IAM step):** set the **service
-   role** to `LabRole` and the **EC2 instance profile** to
-   `LabInstanceProfile`. The wizard's default is to create new roles,
-   which the Learner Lab denies — picking the existing lab roles is
-   what makes the create succeed.
-5. **Networking:** default VPC, public IP activated, all instance
-   subnets selected. No load balancer (single instance).
-6. **Instance type:** `t2.micro` (the `t3.micro` we used for RDS isn't
-   in the EB instance class dropdown).
-7. **Once the environment is `Health: OK`**, set the five environment
-   properties (`STORAGE_BACKEND`, `S3_BUCKET`, `AWS_REGION`,
-   `DATABASE_URL`, `SECRET_KEY`) under **Configuration → Updates,
-   monitoring, and logging → Edit**. This triggers an automatic
-   redeploy.
-8. **Open the RDS firewall to the EB instance.** In EC2 → Security
-   Groups, edit the inbound rules of the security group attached to
-   the RDS instance and allow PostgreSQL (port 5432) from the EB
-   security group ID. Without this rule the app starts up, tries to
-   connect to RDS, and crashes.
-
-After step 8, the live URL serves the running app. The first end-to-end
-test (register → create album → upload photo → see it in the gallery)
-simultaneously proved that Beanstalk, RDS, and S3 were correctly wired
-together.
-
-![SnapVault home page running on Elastic Beanstalk](infrastructure/screenshots/01-app-home.png)
-![Test album with one uploaded photo](infrastructure/screenshots/02-app-album.png)
+![IAM roles](infrastructure/screenshots/09-iam-roles.png)
 
 ---
 
-## Problems encountered and how they were solved
+## 4. How CRUD, S3 and DynamoDB are wired
 
-This is the most useful part of the report — six concrete things that
-broke on the way and how they were diagnosed. Each one took real time;
-documenting them prevents the next student from losing the same hours.
+A single upload touches both AWS services and demonstrates a write to each:
 
-### 1. RDS `Pvoclabs2` explicit-deny on storage type gp3
+```
+POST /albums/<id>/upload
+   │
+   ├─ app reads the uploaded bytes
+   ├─ storage.save(key, bytes)      → S3   put_object        (file → S3)
+   └─ repo.photos.save(photo)       → DynamoDB put_item       (metadata → DynamoDB)
+```
 
-Clicking *Create database* in the RDS wizard returned:
+Displaying that photo demonstrates a read from each:
 
-> *User ... is not authorized to perform: rds:CreateDBInstance ... with an
-> explicit deny in an identity-based policy: arn:aws:iam::.../Pvoclabs2*
+```
+GET /photos/<id>            → DynamoDB get_item   (metadata)
+GET /photos/<id>/raw        → S3 get_object        (bytes, streamed by the app)
+```
 
-The error did not name the offending attribute, which made it hard to
-debug because the wizard has dozens of fields. The diagnostic process
-was to toggle one field at a time and resubmit. After ruling out the
-instance class, engine version, encryption, and Multi-AZ, the culprit
-turned out to be the **storage type**: the wizard's default — even
-under the Sandbox template — is **gp3**, and Pvoclabs2 only allows
-**gp2** in this lab variant. Switching the storage type to gp2 made
-the next submission succeed immediately. Recorded in
-[`infrastructure/setup-rds.md`](infrastructure/setup-rds.md).
-
-### 2. AWS Academy terminal Python 3.7 cannot install `awsebcli`
-
-The standard tool for Beanstalk deployments is the `awsebcli` CLI. But
-the AWS Academy Learner Lab terminal runs Python 3.7, which is past its
-end-of-life date. Installing `awsebcli` failed with a `setuptools` /
-`typing.Protocol` import error: modern Python packaging tools no longer
-support 3.7. Pinning `awsebcli==3.20.10` would have worked, but at that
-point switching to a console-based deploy was faster — and gave free
-screenshots for the report. So the deploy is documented as a console
-workflow in [`setup-eb.md`](infrastructure/setup-eb.md). Worth noting
-that this isn't a problem on real Cloud9, only the in-browser AWS
-Academy terminal.
-
-### 3. Elastic Beanstalk `eb create` requires `LabInstanceProfile`
-
-The first create attempt in the console used the wizard's default
-"create a new role for me" service-role and instance-profile choices,
-and failed several minutes in with an IAM denial. The fix was to pick
-**`LabRole`** as the service role and **`LabInstanceProfile`** as the
-EC2 instance profile — both are pre-created by the lab. Learner Lab
-explicitly denies `iam:CreateRole` and `iam:CreateInstanceProfile`, so
-any flow that tries to make new ones fails.
-
-### 4. Application crashed on first deploy because Initial DB name was blank
-
-After Beanstalk was running and env vars were set, the health turned
-**Degraded**. The logs (`web.stdout.log`) showed:
-
-> *psycopg2.OperationalError: connection to server at "...rds.amazonaws.com",
-> port 5432 failed: FATAL: database "snapvault" does not exist*
-
-This was actually good news — the connection itself succeeded, password
-auth passed, the security-group rule worked. The problem was the
-"Initial database name" field had been left blank in the RDS wizard, so
-the only database on the instance was the default `postgres`. Two fixes:
-either connect with `psql` and run `CREATE DATABASE snapvault;`, or
-change the `DATABASE_URL` env var to point at the existing `postgres`
-database. We picked the env-var change because it avoided needing
-network access to RDS from outside Beanstalk. After the env-var update
-the app booted cleanly.
-
-### 5. Wrong git author on the first commits
-
-Early commits were authored by the freelance assistant's identity
-because the local repo had no `user.name` / `user.email` set and git
-fell back to a global config. Visible on GitHub as the wrong avatar.
-Fixed with `git commit --amend --reset-author --no-edit` after setting
-the local identity to `caan0020`, then
-`git push --force-with-lease origin main` to overwrite the bad commit.
-The remote history now shows only `caan0020` as the author. Documented
-in the Notion engineering notes alongside notes on what `--amend
---reset-author` and `--force-with-lease` actually do.
-
-### 6. Aurora vs RDS PostgreSQL confusion in the wizard
-
-The unified "Aurora and RDS" console makes Aurora and standard RDS
-PostgreSQL look very similar, and Aurora is explicitly denied by
-Pvoclabs2. The Templates row gave it away — Aurora shows "Sandbox" as
-the third template, standard PostgreSQL shows "Free tier" (or, for
-non-Free-Tier-eligible accounts like the Learner Lab, also "Sandbox").
-The fix was to click the **PostgreSQL** card under *Amazon RDS*, not
-the very-similarly-named *Aurora (PostgreSQL Compatible)* card.
+- DynamoDB **read + write**: `app/repos/dynamo.py`
+  (`get_item`, `scan`, `put_item`, `delete_item`).
+- S3 **upload + download**: `app/storage/s3.py`
+  (`put_object`, `get_object`, `delete_object`).
 
 ---
 
-## Repository content
+## 5. Deployment to the cloud
+
+Deployed from **Cloud9** with the EB CLI. Full walkthrough:
+[`infrastructure/CLOUD9_DEPLOY.md`](infrastructure/CLOUD9_DEPLOY.md). In short:
+
+```bash
+# 1. clone in Cloud9
+git clone <repo-url> && cd sdpcba-2026-finalproject-caan0020
+
+# 2. create the AWS resources (idempotent)
+python3 infrastructure/init_dynamodb.py        # SnapVault-Albums + SnapVault-Photos
+python3 infrastructure/init_s3.py              # private bucket (prints its name)
+
+# 3. deploy the app
+cd application
+eb init -p python-3.11 snapvault --region us-east-1
+eb create snapvault-env --single --instance-types t3.micro \
+   --service-role LabRole --instance_profile LabInstanceProfile
+eb setenv SNAPVAULT_BUCKET=<bucket-name-from-step-2>
+eb open
+```
+
+`.ebextensions/01_env.config` sets the backend mode, table names and
+region automatically; only the unique bucket name is passed with
+`eb setenv`. The optional
+[`application/seed.py`](application/seed.py) can fill the live gallery with
+demo photos for the presentation.
+
+![App running on Elastic Beanstalk](infrastructure/screenshots/01-app-dashboard.png)
+![An album with photos](infrastructure/screenshots/02-app-album.png)
+
+---
+
+## 6. Problems encountered and how they were solved
+
+### 1. RDS made the cloud setup fragile → migrated to DynamoDB
+
+The first version of this project used **RDS PostgreSQL**. Getting it
+running meant creating a VPC security-group rule from Beanstalk to RDS,
+hitting an explicit-deny on `gp3` storage in the lab, and a first-deploy
+crash because the initial database name was blank. None of that is
+*application* logic — it's networking plumbing. Switching the data layer to
+**DynamoDB** removed the VPC, the security group, the firewall rule and the
+"database does not exist" class of errors entirely: DynamoDB is reached over
+the AWS API with the instance-profile credentials, so there is nothing to
+wire. The repository abstraction (`app/repos`) made the swap a matter of
+adding one new file (`dynamo.py`) behind the same interface.
+
+### 2. DynamoDB rejects mixed Python types
+
+DynamoDB's document API raises on a raw Python `bool`, and numbers come
+back as `Decimal`, which then breaks JSON/templating. **Fix:** store every
+attribute as a **string** (`favorite` is `"0"` / `"1"`, `size` is a string
+of bytes) and convert at the edges in `app/models.py`. Marshalling becomes
+trivial and the local JSON file stays human-readable too.
+
+### 3. The S3 bucket must stay private, but the browser needs the image
+
+A public bucket would fail the "Block all public access" expectation.
+**Fix:** never hand the browser an S3 URL. The app reads each object itself
+with `get_object` and streams the bytes through a Flask route
+(`/photos/<id>/raw`). This keeps the bucket fully private **and** satisfies
+the rubric's "files downloaded by the app code" line, because the download
+is an explicit boto3 call in our code rather than a presigned/public link.
+
+### 4. `eb create` fails with an IAM denial in Learner Lab
+
+Beanstalk's wizard defaults to *creating new IAM roles*, but Learner Lab
+denies `iam:CreateRole`, so `eb create` fails several minutes in. **Fix:**
+pass the pre-existing lab roles explicitly —
+`--service-role LabRole --instance_profile LabInstanceProfile`. Those roles
+also grant the running app its DynamoDB + S3 access, so no keys are needed.
+
+### 5. App started but crashed in `aws` mode — bucket name missing
+
+In `aws` mode the storage layer needs a bucket name; on the very first
+deploy it wasn't set yet, so `S3FileStorage` raised at startup and health
+went **Degraded**. **Fix:** `eb setenv SNAPVAULT_BUCKET=<name>` (the bucket
+name is unique per deploy, so it can't live in `.ebextensions`). The
+redeploy brought health to **Green**. The error message in
+`app/storage/s3.py` was made explicit so the cause is obvious in the logs.
+
+### 6. Elastic Beanstalk Python platform conventions
+
+EB wouldn't start the app until it found a WSGI callable named
+`application` and a start command. **Fix:** `application/application.py`
+exposes `application = create_app()`, and the one-line `Procfile`
+(`web: gunicorn application:application`) tells Beanstalk how to run it.
+
+---
+
+## 7. Repository content
 
 ```
 sdpcba-2026-finalproject-caan0020/
-├── README.md                       # This report
-├── application/                    # The Flask app (Elastic Beanstalk deployment root)
-│   ├── application.py              # WSGI entry — exposes `application`
-│   ├── config.py                   # env-driven config (DB URL, S3 bucket, ...)
-│   ├── requirements.txt            # Python dependencies
-│   ├── README.md                   # Short app description and how to run
-│   └── snapvault/
-│       ├── __init__.py             # Flask app factory
-│       ├── models.py               # SQLAlchemy models: User, Album, Photo
-│       ├── storage.py              # boto3-backed S3Storage + LocalStorage
-│       ├── auth.py                 # /register, /login, /logout
-│       ├── main.py                 # CRUD routes for albums and photos
-│       ├── templates/              # 8 Jinja templates
-│       └── static/style.css
+├── README.md                         # this report
+├── application/                      # the Flask app (Elastic Beanstalk deploy root)
+│   ├── application.py                # WSGI entry — exposes `application`
+│   ├── Procfile                      # web: gunicorn application:application
+│   ├── requirements.txt              # Flask, boto3, gunicorn, Werkzeug
+│   ├── seed.py                       # optional demo data (self-generated images)
+│   ├── .ebextensions/01_env.config   # env vars + WSGIPath
+│   └── app/
+│       ├── __init__.py               # Flask app factory
+│       ├── config.py                 # env-driven config + local/aws switch
+│       ├── models.py                 # Album & Photo dataclasses
+│       ├── routes.py                 # all routes — full CRUD
+│       ├── repos/                    # DynamoDB / local JSON data layer
+│       ├── storage/                  # S3 / local filesystem file layer
+│       ├── templates/                # 9 Jinja templates + macros
+│       └── static/css/style.css
 └── infrastructure/
-    ├── README.md                   # Index of infrastructure artifacts
-    ├── setup-s3.md                 # S3 bucket creation walkthrough
-    ├── setup-rds.md                # RDS instance creation walkthrough
-    ├── setup-eb.md                 # Elastic Beanstalk deployment walkthrough
-    └── screenshots/                # 10 AWS console screenshots referenced above
+    ├── CLOUD9_DEPLOY.md              # full Cloud9 → Beanstalk walkthrough
+    ├── init_dynamodb.py              # create the two DynamoDB tables
+    ├── init_s3.py                    # create the private S3 bucket
+    ├── setup-dynamodb.md             # DynamoDB deep dive
+    ├── setup-s3.md                   # S3 deep dive
+    ├── setup-eb.md                   # Elastic Beanstalk deep dive
+    ├── README.md                     # infrastructure index
+    └── screenshots/                  # AWS console captures referenced above
 ```
 
 ---
 
-## Running locally
+## 8. Running locally
 
-For developer iteration, the same code runs on SQLite + a local
-`uploads/` directory:
+No AWS account needed — the default backend is `local` (a JSON file + a
+local folder):
 
 ```bash
 cd application
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+python seed.py            # optional: fill the gallery with demo photos
 python application.py
-# open http://127.0.0.1:5050
+# open http://127.0.0.1:5000
 ```
 
-Setting `STORAGE_BACKEND=s3`, `S3_BUCKET=...`, and
-`DATABASE_URL=postgresql://...` flips it onto RDS + S3 with zero code
-changes — the same trick Elastic Beanstalk uses at deploy time.
+Setting `SNAPVAULT_BACKEND=aws`, `SNAPVAULT_BUCKET=…` (and the table /
+region vars) flips the very same code onto DynamoDB + S3 — the same switch
+Elastic Beanstalk uses at deploy time.
