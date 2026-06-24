@@ -291,14 +291,17 @@ pass the pre-existing lab roles explicitly —
 `--service-role LabRole --instance_profile LabInstanceProfile`. Those roles
 also grant the running app its DynamoDB + S3 access, so no keys are needed.
 
-### 5. App started but crashed in `aws` mode — bucket name missing
+### 5. Photos failed until the bucket name was set on Beanstalk
 
-In `aws` mode the storage layer needs a bucket name; on the very first
-deploy it wasn't set yet, so `S3FileStorage` raised at startup and health
-went **Degraded**. **Fix:** `eb setenv SNAPVAULT_BUCKET=<name>` (the bucket
-name is unique per deploy, so it can't live in `.ebextensions`). The
-redeploy brought health to **Green**. The error message in
-`app/storage/s3.py` was made explicit so the cause is obvious in the logs.
+In `aws` mode the storage layer needs a bucket name, which is **unique per
+deploy** and so can't live in `.ebextensions`. On the very first deploy it
+wasn't set yet. The first version raised at startup, which made the whole
+environment go **Degraded** in the window before it was set. **Fix:** two
+parts — (a) `eb setenv SNAPVAULT_BUCKET=<name>` to provide it, and (b) the
+bucket is now checked **lazily** (`_require_bucket` in `app/storage/s3.py`),
+so the app boots healthy and only *photo* operations need the bucket. That
+turned a scary red environment right after `eb create` into a green one
+that just couldn't upload until the one `eb setenv` ran.
 
 ### 6. Elastic Beanstalk Python platform conventions
 

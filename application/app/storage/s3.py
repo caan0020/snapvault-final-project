@@ -13,16 +13,22 @@ from .base import FileStorage
 
 class S3FileStorage(FileStorage):
     def __init__(self):
-        if not Config.BUCKET:
-            raise RuntimeError(
-                "SNAPVAULT_BUCKET is not set — required in aws mode "
-                "(set it with `eb setenv SNAPVAULT_BUCKET=...`)"
-            )
+        # The bucket name is checked lazily (see _require_bucket) rather than
+        # here, so the app still boots — and Beanstalk health stays Green —
+        # in the short window between `eb create` and `eb setenv SNAPVAULT_BUCKET`.
         self.bucket = Config.BUCKET
         self.client = boto3.client("s3", region_name=Config.AWS_REGION)
 
+    def _require_bucket(self):
+        if not self.bucket:
+            raise RuntimeError(
+                "SNAPVAULT_BUCKET is not set — set it with "
+                "`eb setenv SNAPVAULT_BUCKET=<bucket-name>`"
+            )
+
     def save(self, key, fileobj, content_type):
         # UPLOAD: app reads the bytes and puts them into S3.
+        self._require_bucket()
         self.client.put_object(
             Bucket=self.bucket,
             Key=key,
@@ -34,8 +40,10 @@ class S3FileStorage(FileStorage):
     def open(self, key):
         # DOWNLOAD: app pulls the object from S3 and returns the bytes,
         # which the route then streams to the browser.
+        self._require_bucket()
         resp = self.client.get_object(Bucket=self.bucket, Key=key)
         return resp["Body"].read()
 
     def delete(self, key):
+        self._require_bucket()
         self.client.delete_object(Bucket=self.bucket, Key=key)
